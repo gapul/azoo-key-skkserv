@@ -13,6 +13,36 @@ zenz-v1はKeita Miwa ([𝕏](https://x.com/miwa_ensan))さんによって開発�
 Linux環境向けのバイナリには[llama.cpp](https://github.com/ggml-org/llama.cpp)の[Shared Object](https://github.com/ggml-org/llama.cpp/releases/tag/b4846)を同梱させていただいております。  
 かつ `RUNPATH` を `$ORIGIN` にpatchさせていただいております。
 
+## このフォークについて (Linux / NixOS)
+
+[gitusp/azoo-key-skkserv](https://github.com/gitusp/azoo-key-skkserv) の非公開フォークです。Linux 版を NixOS で動かすための Nix flake を足しています。
+
+- `packages.<system>.default`: upstream の Linux リリースを `autoPatchelfHook` で NixOS 向けに組み直したもの (x86_64-linux / aarch64-linux)。
+  同梱の llama.cpp は azooKey の fork (`azooKey/llama.cpp` b4846) に差し替えています。upstream 同梱の ggml-org 版は zenz-v1 の
+  pre-tokenizer (`gpt2-small-japanese-char`) を知らず、モデルの読み込みに失敗して Zenzai なし (辞書だけ) で動いてしまうためです。
+- `homeManagerModules.default`: `services.azoo-key-skkserv` (systemd ユーザーサービス)。
+- `overlays.default`: `pkgs.azoo-key-skkserv`。
+
+```nix
+# flake.nix
+inputs.azoo-key-skkserv.url = "git+ssh://git@github.com/gapul/azoo-key-skkserv";
+
+# home-manager
+imports = [ inputs.azoo-key-skkserv.homeManagerModules.default ];
+services.azoo-key-skkserv.enable = true; # 127.0.0.1:1178, --incoming-charset UTF-8
+```
+
+fcitx5-skk からは `dictionary_list` に次の1行を足します。libskk は要求と応答に同じ文字コードを使い、このサーバーは常に UTF-8 で返すので、両方 UTF-8 にします。
+
+```
+type=server,host=127.0.0.1,port=1178,encoding=UTF-8
+```
+
+### Linux 版の制限
+
+- **EUC-JP の要求には応答しません。** `--incoming-charset EUC-JP` で起動しても、EUC-JP の要求を受けると候補を返さずに接続が閉じられます (Linux の Foundation が EUC-JP をデコードできないためと思われます)。Linux ではクライアント側も UTF-8 で要求してください (skkeleton なら `skkServerReqEnc = "utf-8"`)。
+- **ソースからのビルドは今のところ通りません。** nixpkgs の Swift 6.2.4 では、C++ interop を有効にすると同梱の clang 17 が gcc 16 の libstdc++ ヘッダーを解釈できず、依存の swift-collections の時点で止まります。`nix develop` の devShell は、これが直ったとき用に残しています。
+
 ## azoo-key-skkservについて
 
 受け取った読みをAzooKeyKanaKanjiConverterで漢字変換し、候補を辞書として返すskkservです。  
