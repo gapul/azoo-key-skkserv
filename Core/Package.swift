@@ -16,7 +16,7 @@ let package = Package(
         ),
     ],
     dependencies: [
-        .package(url: "https://github.com/azooKey/AzooKeyKanaKanjiConverter", revision: "ecb569963d2969340cca81a3fe6840bdb9a0afc7", traits: ["Zenzai"]),
+        .package(url: "https://github.com/azooKey/AzooKeyKanaKanjiConverter", revision: "04ce2ec3afe2bd6f92fcae1dc15a2357d332c27a", traits: ["Zenzai"]),
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.0.0"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.0.0"),
     ],
@@ -30,7 +30,7 @@ let package = Package(
                 .product(name: "Logging", package: "swift-log"),
             ],
             resources: [
-                .copy("zenz-v1.gguf")
+                .copy("zenz-v3.2-small.gguf")
             ],
             swiftSettings: [
                 .interoperabilityMode(.Cxx)

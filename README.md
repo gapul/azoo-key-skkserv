@@ -6,16 +6,17 @@
 </div>
 
 [AzooKeyKanaKanjiConverter](https://github.com/azooKey/AzooKeyKanaKanjiConverter)を変換に利用するskkservです。  
-AzooKeyKanaKanjiConverterから参照される、ニューラルかな漢字変換システム「Zenzai」で利用するモデルは[zenz-v1](https://huggingface.co/Miwa-Keita/zenz-v1)を利用させていただいています。
+AzooKeyKanaKanjiConverterから参照される、ニューラルかな漢字変換システム「Zenzai」で利用するモデルは[zenz-v3.2-small](https://huggingface.co/Miwa-Keita/zenz-v3.2-small-gguf)を利用させていただいています。
 
-zenz-v1はKeita Miwa ([𝕏](https://x.com/miwa_ensan))さんによって開発され、[CC-BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/deed.ja)で提供されています。
+zenzはKeita Miwa ([𝕏](https://x.com/miwa_ensan))さんによって開発され、[CC-BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/deed.ja)で提供されています。
 
 Linux環境向けのバイナリには[llama.cpp](https://github.com/ggml-org/llama.cpp)の[Shared Object](https://github.com/ggml-org/llama.cpp/releases/tag/b4846)を同梱させていただいております。  
 かつ `RUNPATH` を `$ORIGIN` にpatchさせていただいております。
 
 ## このフォークについて (Linux / NixOS)
 
-[gitusp/azoo-key-skkserv](https://github.com/gitusp/azoo-key-skkserv) の非公開フォークです。Linux 版を NixOS で動かすための Nix flake を足しています。
+[gitusp/azoo-key-skkserv](https://github.com/gitusp/azoo-key-skkserv) の非公開フォークです。Linux 版を NixOS で動かすための Nix flake と、文脈つき変換 (下記の opcode 5、zenz-v3.2) を足しています。
+文脈を送るクライアントは fcitx5-skk の改造版 (`dictionary_list` の `context=true`) です。
 
 - `packages.<system>.default`: upstream の Linux リリースを `autoPatchelfHook` で NixOS 向けに組み直したもの (x86_64-linux / aarch64-linux)。
   同梱の llama.cpp は azooKey の fork (`azooKey/llama.cpp` b4846) に差し替えています。upstream 同梱の ggml-org 版は zenz-v1 の
@@ -111,6 +112,16 @@ skkservの標準に準拠しているつもりです。
 | 2      | なし     | サーバー情報要求 | `azoo-key-skkserv/{バージョン} `                                          |
 | 3      | なし     | ホスト情報要求   | `{ホスト名}/127.0.0.1:{ポート}/ `                                         |
 | 4      | 見出し語 | 補完要求         | 補完がある時: `1/{補完1}/{補完2}/.../{補完n}/\n`<br />補完がない時: `4\n` |
+| 5      | 見出し語 左文脈 右文脈 | 文脈つき辞書要求 (拡張) | opcode 1 と同じ |
+
+opcode 5 はこのフォークの拡張です。`5{見出し語} {左文脈} {右文脈}\n` の形で、文脈はカーソルの前後のテキストを UTF-8 でパーセントエンコードしたものです (空・省略可)。
+改行までを1つの要求として読み、見出し語も含めて `--incoming-charset` によらず UTF-8 です。
+サーバーはそれぞれカーソルのある行の最大30文字だけを使い、zenz-v3 のプロンプトに左右の文脈として渡します。
+
+```console
+$ printf '5いこう %s %s\n' "$(jq -rn '"社長の"|@uri')" "$(jq -rn '"を確認する"|@uri')" | nc -q1 127.0.0.1 1178
+1/意向/以降/移行/行こう/...
+```
 
 ## 開発
 
