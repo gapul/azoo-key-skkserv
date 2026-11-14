@@ -15,34 +15,53 @@ Linux環境向けのバイナリには[llama.cpp](https://github.com/ggml-org/ll
 
 ## このフォークについて (Linux / NixOS)
 
-[gitusp/azoo-key-skkserv](https://github.com/gitusp/azoo-key-skkserv) の非公開フォークです。Linux 版を NixOS で動かすための Nix flake と、文脈つき変換 (下記の opcode 5、zenz-v3.2) を足しています。
-文脈を送るクライアントは fcitx5-skk の改造版 (`dictionary_list` の `context=true`) です。
+このリポジトリ（`gapul/azoo-key-skkserv`）は、`gitusp/azoo-key-skkserv`（MIT ライセンス）の個人用フォークです。元リポジトリに対して以下の変更を加えています。
 
-- `packages.<system>.default`: upstream の Linux リリースを `autoPatchelfHook` で NixOS 向けに組み直したもの (x86_64-linux / aarch64-linux)。
-  同梱の llama.cpp は azooKey の fork (`azooKey/llama.cpp` b4846) に差し替えています。upstream 同梱の ggml-org 版は zenz-v1 の
-  pre-tokenizer (`gpt2-small-japanese-char`) を知らず、モデルの読み込みに失敗して Zenzai なし (辞書だけ) で動いてしまうためです。
-- `homeManagerModules.default`: `services.azoo-key-skkserv` (systemd ユーザーサービス)。
-- `overlays.default`: `pkgs.azoo-key-skkserv`。
+- **Linux / NixOS 用の Nix flake**: `packages.x86_64-linux.default`、`overlays.default`（`pkgs.azoo-key-skkserv`）、および `homeManagerModules.default`（`services.azoo-key-skkserv` の systemd ユーザーサービス。`127.0.0.1:1178`、`--incoming-charset UTF-8` で起動）を提供します。
+- **変換エンジンの更新**: `AzooKeyKanaKanjiConverter` を azooKey Desktop と同じリビジョンに更新し、Zenzai のモデルを `zenz-v1` から `zenz-v3.2-small` に変更しています。
+- **文脈つき辞書要求（opcode `5`）の追加**: カーソル前後の文脈を含めた変換要求に対応しています（opcode `0`〜`4` は変更ありません）。たとえば「社長の|いこう|を確認する」では先頭候補が「意向」に、「一緒に公園へ|いこう」では「行こう」になります。
+
+Nix パッケージは、このフォークの GitHub Release で配布している Linux `x86_64` のビルド済みバイナリを `autoPatchelfHook` で組み直したものです。`aarch64` と macOS のバイナリはこのフォークでは配布していません。
+
+同梱している `llama.cpp` の共有ライブラリは azooKey のフォーク（`azooKey/llama.cpp` `b4846`）のものです。`ggml-org` 版の `b4846` は `zenz-v1` の pre-tokenizer（`gpt2-small-japanese-char`）を知らずモデルの読み込みに失敗するため、azooKey 版を使用しています。
+
+### Nix flake の使い方
+
+`flake.nix` の `inputs` に追加し、Home Manager から有効化できます。
 
 ```nix
 # flake.nix
-inputs.azoo-key-skkserv.url = "git+ssh://git@github.com/gapul/azoo-key-skkserv";
+inputs.azoo-key-skkserv.url = "github:gapul/azoo-key-skkserv";
+```
 
-# home-manager
+```nix
+# Home Manager の設定
 imports = [ inputs.azoo-key-skkserv.homeManagerModules.default ];
-services.azoo-key-skkserv.enable = true; # 127.0.0.1:1178, --incoming-charset UTF-8
+services.azoo-key-skkserv.enable = true;
 ```
 
-fcitx5-skk からは `dictionary_list` に次の1行を足します。libskk は要求と応答に同じ文字コードを使い、このサーバーは常に UTF-8 で返すので、両方 UTF-8 にします。
+### fcitx5-skk の設定
 
-```
+libskk は要求と応答に同じ文字コードを使い、このサーバーは常に UTF-8 で返すため、`encoding=UTF-8` を指定します。
+
+標準の `fcitx5-skk` / `libskk` は文脈を送らないため opcode `1` のみを使用し、文脈なしの変換としてそのままこのサーバーを使えます。`dictionary_list` には以下の行を設定します。
+
+```text
 type=server,host=127.0.0.1,port=1178,encoding=UTF-8
 ```
 
+文脈つきの変換（opcode `5`）を使うには、同じ作者による `fcitx5-skk` の個人用フォーク（<https://github.com/gapul/fcitx5-skk> の `feature/context-server` ブランチ）を使用し、`dictionary_list` の行に `context=true` を付けます。
+
+```text
+type=server,host=127.0.0.1,port=1178,encoding=UTF-8,context=true
+```
+
+文脈は `127.0.0.1` のサーバーに送る想定です。入力中の文章の一部がサーバーに送られることに注意してください。
+
 ### Linux 版の制限
 
-- **EUC-JP の要求には応答しません。** `--incoming-charset EUC-JP` で起動しても、EUC-JP の要求を受けると候補を返さずに接続が閉じられます (Linux の Foundation が EUC-JP をデコードできないためと思われます)。Linux ではクライアント側も UTF-8 で要求してください (skkeleton なら `skkServerReqEnc = "utf-8"`)。
-- **ソースからのビルドは今のところ通りません。** nixpkgs の Swift 6.2.4 では、C++ interop を有効にすると同梱の clang 17 が gcc 16 の libstdc++ ヘッダーを解釈できず、依存の swift-collections の時点で止まります。`nix develop` の devShell は、これが直ったとき用に残しています。
+- **EUC-JP の要求に応答しない**: `--incoming-charset EUC-JP` で起動しても、EUC-JP の opcode `1` の要求を受けると候補を返しません（Linux の Foundation が EUC-JP をデコードできないためと思われます）。Linux ではクライアント側も UTF-8 で要求してください（skkeleton なら `skkServerReqEnc = "utf-8"`）。opcode `5` は常に UTF-8 なので影響しません。
+- **ソースからのビルド**: nixpkgs の Swift 6.2.4 ではソースからのビルドが通りません（C++ interop を有効にすると、同梱の clang 17 が gcc 16 の `libstdc++` ヘッダーを解釈できず、依存の `swift-collections` の時点で止まります）。そのため、GitHub Release のバイナリは `swift:6.2-jammy` のコンテナで `swift build -c release --static-swift-stdlib` を実行してビルドしたものです。`nix develop` の `devShell` は、この問題が直ったときのために残してあります。
 
 ## azoo-key-skkservについて
 
@@ -114,9 +133,7 @@ skkservの標準に準拠しているつもりです。
 | 4      | 見出し語 | 補完要求         | 補完がある時: `1/{補完1}/{補完2}/.../{補完n}/\n`<br />補完がない時: `4\n` |
 | 5      | 見出し語 左文脈 右文脈 | 文脈つき辞書要求 (拡張) | opcode 1 と同じ |
 
-opcode 5 はこのフォークの拡張です。`5{見出し語} {左文脈} {右文脈}\n` の形で、文脈はカーソルの前後のテキストを UTF-8 でパーセントエンコードしたものです (空・省略可)。
-改行までを1つの要求として読み、見出し語も含めて `--incoming-charset` によらず UTF-8 です。
-サーバーはそれぞれカーソルのある行の最大30文字だけを使い、zenz-v3 のプロンプトに左右の文脈として渡します。
+opcode `5` は、このフォークで追加した文脈つき辞書要求です（opcode `0`〜`4` は変更ありません）。要求の形式は `5{見出し語} {左文脈} {右文脈}\n` です。改行までを1つの要求として読み、見出し語も含めて `--incoming-charset` によらず UTF-8 として扱います。`{左文脈}` と `{右文脈}` はカーソルの前後のテキストを UTF-8 でパーセントエンコードしたもので、空または省略可能です。サーバーはそれぞれカーソルのある行の最大30文字だけを使い、`zenz-v3` のプロンプトに左右の文脈として渡します。応答の形式は opcode `1` と同じです。文脈は `127.0.0.1` のサーバーに送る想定であり、入力中の文章の一部がサーバーに送られることに注意してください。
 
 ```console
 $ printf '5いこう %s %s\n' "$(jq -rn '"社長の"|@uri')" "$(jq -rn '"を確認する"|@uri')" | nc -q1 127.0.0.1 1178

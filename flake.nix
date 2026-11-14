@@ -11,9 +11,12 @@
         "aarch64-linux"
       ];
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
+      # Only the x86_64 Linux binary is released (see nix/package.nix).
+      forPackageSystems =
+        f: nixpkgs.lib.genAttrs [ "x86_64-linux" ] (system: f nixpkgs.legacyPackages.${system});
     in
     {
-      packages = forAllSystems (pkgs: {
+      packages = forPackageSystems (pkgs: {
         default = pkgs.callPackage ./nix/package.nix { };
       });
 
