@@ -6,10 +6,11 @@
 # from source does not work with nixpkgs' Swift 6.2.4 yet: Package.swift turns on C++ interop,
 # and Swift's bundled clang 17 cannot parse the gcc 16 libstdc++ headers nixpkgs now defaults to
 # (it fails as early as swift-collections). Rebuilding the toolchain against an older gcc would
-# fix that at the cost of hours per nixpkgs bump; see flake.nix's devShell for the source build.
+# fix that at the cost of hours per nixpkgs bump; the fork's flake.nix keeps a devShell for the
+# source build.
 #
 # The release's lib/ is azooKey's llama.cpp fork (b4846), not ggml-org's b4846 that upstream's
-# releases bundle: the latter does not know zenz-v1's "gpt2-small-japanese-char" pre-tokenizer, so
+# releases bundle: the latter does not know zenz's "gpt2-small-japanese-char" pre-tokenizer, so
 # the model fails to load ("unknown pre-tokenizer type") and the server quietly runs on the
 # dictionary alone, without Zenzai. Only x86_64-linux is released.
 {
